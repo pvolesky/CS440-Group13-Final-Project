@@ -1,0 +1,37 @@
+
+name: Test History Metrics
+
+on:
+  push:
+    branches:
+      - feature/churn-age-metrics
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run history metrics
+        run: |
+          python scripts/history_metrics.py . --output results.csv
+
+      - name: Display results
+        run: |
+          cat results.csv
+
+      - name: Upload CSV results
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-metrics-results
+          path: results.csv
