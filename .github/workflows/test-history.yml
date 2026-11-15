@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository with history
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -22,13 +22,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run history metrics
+      - name: Run automated tests
         run: |
-          python scripts/history_metrics.py . --output results.csv
+          python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Generate history metrics
+        run: |
+          python scripts/history_metrics.py . \
+            --snapshot-date 2026-11-15T23:59:59Z \
+            --window-days 365 \
+            --output results.csv
 
       - name: Display results
-        run: |
-          cat results.csv
+        run: cat results.csv
 
       - name: Upload CSV results
         uses: actions/upload-artifact@v4
