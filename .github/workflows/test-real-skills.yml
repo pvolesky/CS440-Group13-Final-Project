@@ -2,6 +2,9 @@
 name: Test Real Agent Skills
 
 on:
+  push:
+    branches:
+      - feature/churn-age-metrics
   workflow_dispatch:
 
 jobs:
