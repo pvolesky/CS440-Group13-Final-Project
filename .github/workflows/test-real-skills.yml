@@ -1,0 +1,65 @@
+
+name: Test Real Agent Skills
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze-skills:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout our project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Clone real skills repository
+        run: |
+          git clone https://github.com/anthropics/skills.git \
+            external-skills
+
+      - name: Analyze Git history
+        run: |
+          python scripts/history_metrics.py external-skills \
+            --snapshot-date 2026-11-15T23:59:59Z \
+            --output all_results.csv
+
+      - name: Keep only SKILL.md files
+        run: |
+          python - <<'PY'
+          import csv
+
+          with open("all_results.csv", newline="") as f:
+              rows = list(csv.DictReader(f))
+
+          skills = [
+              row for row in rows
+              if row["file"].split("/")[-1].lower() == "skill.md"
+          ]
+
+          with open("skills_results.csv", "w", newline="") as f:
+              writer = csv.DictWriter(
+                  f,
+                  fieldnames=[
+                      "file",
+                      "revision_count",
+                      "days_since_last_edit",
+                  ],
+              )
+              writer.writeheader()
+              writer.writerows(skills)
+
+          print(f"Analyzed {len(skills)} SKILL.md files")
+          for row in skills[:10]:
+              print(row)
+          PY
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-skills-history-results
+          path: skills_results.csv
