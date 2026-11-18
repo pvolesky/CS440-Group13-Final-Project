@@ -1,0 +1,67 @@
+
+name: Test Real Source Code
+
+on:
+  push:
+    branches:
+      - feature/churn-age-metrics
+  workflow_dispatch:
+
+jobs:
+  analyze-source:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout our project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Clone source code repository
+        run: |
+          git clone https://github.com/pallets/click.git \
+            external-source
+
+      - name: Analyze Git history
+        run: |
+          python scripts/history_metrics.py external-source \
+            --snapshot-date 2026-11-15T23:59:59Z \
+            --output all_source_results.csv
+
+      - name: Keep Python source files
+        run: |
+          python - <<'PY'
+          import csv
+
+          with open("all_source_results.csv", newline="") as f:
+              rows = list(csv.DictReader(f))
+
+          source_files = [
+              row for row in rows
+              if row["file"].endswith(".py")
+              and row["file"].startswith("src/")
+          ]
+
+          with open("source_results.csv", "w", newline="") as f:
+              writer = csv.DictWriter(
+                  f,
+                  fieldnames=[
+                      "file",
+                      "revision_count",
+                      "days_since_last_edit",
+                  ],
+              )
+              writer.writeheader()
+              writer.writerows(source_files)
+
+          print(f"Analyzed {len(source_files)} Python files")
+          PY
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-source-history-results
+          path: source_results.csv
