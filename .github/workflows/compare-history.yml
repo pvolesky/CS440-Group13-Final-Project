@@ -1,0 +1,111 @@
+
+name: Compare Churn and Age Metrics
+
+on:
+  push:
+    branches:
+      - feature/churn-age-metrics
+  workflow_dispatch:
+
+jobs:
+  compare-history:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install matplotlib
+
+      - name: Run automated tests
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Clone real agent skills
+        run: |
+          git clone https://github.com/anthropics/skills.git external-skills
+
+      - name: Clone real source code
+        run: |
+          git clone https://github.com/pallets/click.git external-source
+
+      - name: Generate agent skills history metrics
+        run: |
+          python scripts/history_metrics.py external-skills \
+            --snapshot-date 2026-11-15T23:59:59Z \
+            --window-days 365 \
+            --output all_skills.csv
+
+      - name: Generate source code history metrics
+        run: |
+          python scripts/history_metrics.py external-source \
+            --snapshot-date 2026-11-15T23:59:59Z \
+            --window-days 365 \
+            --output all_source.csv
+
+      - name: Filter agent skills and source code
+        run: |
+          python - <<'PY'
+          import csv
+
+          def filter_csv(source, output, condition):
+              with open(source, newline="", encoding="utf-8") as f:
+                  rows = list(csv.DictReader(f))
+
+              filtered = [row for row in rows if condition(row["file"])]
+
+              with open(output, "w", newline="", encoding="utf-8") as f:
+                  writer = csv.DictWriter(
+                      f,
+                      fieldnames=[
+                          "file",
+                          "revision_count",
+                          "days_since_last_edit",
+                      ],
+                  )
+                  writer.writeheader()
+                  writer.writerows(filtered)
+
+              print(f"{output}: {len(filtered)} files")
+
+          filter_csv(
+              "all_skills.csv",
+              "skills_results.csv",
+              lambda path: path.split("/")[-1].lower() == "skill.md",
+          )
+
+          filter_csv(
+              "all_source.csv",
+              "source_results.csv",
+              lambda path: path.startswith("src/") and path.endswith(".py"),
+          )
+          PY
+
+      - name: Generate comparison statistics and graphs
+        run: |
+          python scripts/compare_history.py \
+            --skills skills_results.csv \
+            --source source_results.csv \
+            --output-dir results
+
+      - name: Display summary statistics
+        run: cat results/history_summary.csv
+
+      - name: Upload comparison results
+        uses: actions/upload-artifact@v4
+        with:
+          name: churn-age-comparison-results
+          path: |
+            skills_results.csv
+            source_results.csv
+            results/history_summary.csv
+            results/revision_count_comparison.png
+            results/days_since_last_edit_comparison.png
